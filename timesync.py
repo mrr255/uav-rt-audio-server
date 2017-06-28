@@ -25,7 +25,7 @@ def listener(self, name, message):
         print(date_str);
         subprocess.call(["sudo","date", "+%s", "-s", date_str])
         print(time.time())
-        print(time.localtime())
+        print datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f-7:00')[:-3]
 
 try:
 
