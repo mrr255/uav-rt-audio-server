@@ -78,7 +78,7 @@ public class UAVAudioServer
     System.out.println("Here is the standard error of the command (if any):\n");
     while ((s = stdError.readLine()) != null)
     {
-        //System.out.println(s);
+      System.out.println(s);
     }
   }
   catch(Exception e)
@@ -141,7 +141,7 @@ public class UAVAudioServer
         {
         micLine = AudioSystem.getTargetDataLine(format);
         startTime = new Date();
-        dateForm = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
+        dateForm = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
         try
         {
           log = new File("." + File.separator + "flightData" + File.separator + dateForm.format(startTime) + ".log");
@@ -194,7 +194,7 @@ public class UAVAudioServer
               }
             }//end of catch
             count += audioData.length;
-            if(count >= 48000*10*2)
+            if(count >= 48000*15*2)
             {
               archiveStream.close();
               Date newTime = new Date();
