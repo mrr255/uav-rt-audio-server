@@ -140,8 +140,16 @@ public class UAVAudioServer
         try
         {
         micLine = AudioSystem.getTargetDataLine(format);
+        DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
+        micLine = (TargetDataLine) AudioSystem.getLine(info);
+        micLine.open(format);
+        micStream = new AudioInputStream(micLine);
+        archiveStream = new FileOutputStream(dstFile);
+        outputStream = new DataOutputStream(client.getOutputStream());
+        audioData = new byte[16000];
         startTime = new Date();
         dateForm = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+        logString = "." + File.separator + "flightData" + File.separator + dateForm.format(startTime) + ".log";
         try
         {
           log = new File("." + File.separator + "flightData" + File.separator + dateForm.format(startTime) + ".log");
@@ -151,20 +159,12 @@ public class UAVAudioServer
         {//If folder doesn't exist, make it
           System.out.println(e);
           new File("." + File.separator + "flightData").mkdirs();
+          log = new File(logString);
+          logWriter = new FileWriter(log);
         }
-        logString = "." + File.separator + "flightData" + File.separator + dateForm.format(startTime) + ".log";
-        log = new File(logString);
-        logWriter = new FileWriter(log);
         logWriter.write(dateForm.format(startTime) +".dat ");
         logWriter.flush();
         dstFile = new File("." + File.separator +  "flightData" + File.separator + dateForm.format(startTime) + ".dat");
-        DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
-        micLine = (TargetDataLine) AudioSystem.getLine(info);
-        micLine.open(format);
-        micStream = new AudioInputStream(micLine);
-        archiveStream = new FileOutputStream(dstFile);
-        outputStream = new DataOutputStream(client.getOutputStream());
-        audioData = new byte[16000];
 
         micLine.start();
         System.out.println("Starting!");
