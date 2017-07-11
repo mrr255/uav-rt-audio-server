@@ -45,7 +45,7 @@ public class UAVAudioServer
   public UAVAudioServer()
   {
     date= new java.util.Date(); //Get Current Time at startup
-    format = new AudioFormat(48000, 16, 1, true, true); //Define format of the audio stream
+    format = new AudioFormat(16000, 16, 1, true, true); //Define format of the audio stream
     reconnecting = false; //First connection, so not reconnecting
     System.out.println("Init Done!");
 
@@ -152,6 +152,7 @@ public class UAVAudioServer
      RecordThread()
       {
         super();
+        this.setPriority(MAX_PRIORITY);
         start();
       }
 
@@ -161,7 +162,7 @@ public class UAVAudioServer
         {
         micLine = AudioSystem.getTargetDataLine(format); //Prep Microphone
         startTime = new Date(); //Get current time  (BASE FOR TIMESTAMP)
-        dateForm = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"); //Format code for filename
+        dateForm = new SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss--SSSXXX"); //Format code for filename
         logString = "." + File.separator + "flightData" + File.separator + dateForm.format(startTime) + ".log";
         try
         {
@@ -293,7 +294,7 @@ public class UAVAudioServer
 } //end of class
 
 
-//Solution Ideas:
+//Solution Ideas
 //Decrease Sample Rate
 //Thread priority
 //Size of frame as it comes in
