@@ -32,7 +32,7 @@ public class AudioProcess
 	//Once Done, convert Byte Array to Wav File
       AudioInputStream pcm;
       InputStream b_in = new ByteArrayInputStream(dat);
-      AudioFormat format = new AudioFormat(16000, 16, 1, true, true);
+      AudioFormat format = new AudioFormat(48000, 16, 1, true, true);
       AudioInputStream source = new AudioInputStream(b_in,format , dat.length/2);
       String file = args[0].substring(0,args[0].length()-4);
       File newFile = new File(file + ".wav");

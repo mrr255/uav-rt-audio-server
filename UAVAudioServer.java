@@ -1,7 +1,12 @@
 
-import java.io.*;
-import java.net.*;
 
+import java.io.*;
+import java.io.FileOutputStream;
+import java.net.*;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import javax.sound.sampled.*;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
@@ -9,12 +14,6 @@ import javax.sound.sampled.DataLine;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.TargetDataLine;
 import javax.sound.sampled.spi.AudioFileWriter;
-import javax.sound.sampled.*;
-
-import java.sql.Timestamp;
-import java.util.Date;
-import java.text.SimpleDateFormat;
-
 public class UAVAudioServer
 {
   //Declare main variables for cross Thread referencing
@@ -22,7 +21,7 @@ public class UAVAudioServer
 	private DataOutputStream outputStream; //Data out to client
   private TargetDataLine micLine;
 	private AudioInputStream micStream; //Data in from Microphone
-	private FileOutputStream archiveStream; //Data out to File
+	private ByteArrayOutputStream archiveStream; //Data out to File
 	private FileWriter logWriter; //Data out to Log
   private File log; //Log File
   private String logString; //Name of log file
@@ -45,7 +44,7 @@ public class UAVAudioServer
   public UAVAudioServer()
   {
     date= new java.util.Date(); //Get Current Time at startup
-    format = new AudioFormat(16000, 16, 1, true, true); //Define format of the audio stream
+    format = new AudioFormat(48000, 16, 1, true, true); //Define format of the audio stream
     reconnecting = false; //First connection, so not reconnecting
     System.out.println("Init Done!");
 
@@ -152,7 +151,6 @@ public class UAVAudioServer
      RecordThread()
       {
         super();
-        this.setPriority(MAX_PRIORITY);
         start();
       }
 
@@ -162,7 +160,7 @@ public class UAVAudioServer
         {
         micLine = AudioSystem.getTargetDataLine(format); //Prep Microphone
         startTime = new Date(); //Get current time  (BASE FOR TIMESTAMP)
-        dateForm = new SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss--SSSXXX"); //Format code for filename
+        dateForm = new SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss"); //Format code for filename
         logString = "." + File.separator + "flightData" + File.separator + dateForm.format(startTime) + ".log";
         try
         {
@@ -187,7 +185,8 @@ public class UAVAudioServer
 
 
         micStream = new AudioInputStream(micLine); //Create Microphone Stream
-        archiveStream = new FileOutputStream(dstFile); //Create "Archive"Local Stream
+        archiveStream = new ByteArrayOutputStream(48000*15*2+16000); //Create "Archive"Local Stream
+        FileOutputStream fileStream = new FileOutputStream(dstFile);
         outputStream = new DataOutputStream(client.getOutputStream()); //Create "Remote" Socket Stream
         audioData = new byte[16000];
 
@@ -221,12 +220,13 @@ public class UAVAudioServer
             count += audioData.length; //Either way, update count. (Represents current size of data file)
             if(count >= 48000*15*2) // If at defined max size, (Sample Rate * Seconds * Frame Size)
             {
-              archiveStream.close(); //Close current file
+              archiveStream.writeTo(fileStream); //Close current file
+              archiveStream.reset();
               Date newTime = new Date();  //Get current time (for timestamp)
               logWriter.write(dateForm.format(newTime) +".dat "); //add new data file to the log
               logWriter.flush(); //Force Write
               dstFile = new File("." + File.separator + "flightData" + File.separator + dateForm.format(newTime) + ".dat"); //Create new data file
-              archiveStream = new FileOutputStream(dstFile); //Init Stream for new file
+              fileStream = new FileOutputStream(dstFile); //Init Stream for new file
               count = 0; //Reset Counter
             }//end if
         }//end while (MAIN WRITE LOOP)
@@ -236,7 +236,10 @@ public class UAVAudioServer
         logWriter.close();
         outputStream.flush();
         outputStream.close();
-        archiveStream.close();
+        archiveStream.writeTo(fileStream); //Close current file
+        archiveStream.reset();
+        fileStream.close();
+
         micLine.close();
         //Set server states
         isConnected = false;
