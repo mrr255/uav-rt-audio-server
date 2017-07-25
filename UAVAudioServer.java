@@ -41,6 +41,14 @@ public class UAVAudioServer
   private final ReentrantLock streamLock;
   private final ReentrantLock saveLock;
   private byte[] streamArray;
+  private ServerSocket commsSocket;
+  private BufferedReader input;
+  private PrintWriter out;
+  private volatile boolean comReady = false;
+  private CommThread comms;
+  private RecordThread recs;
+  private WriteThread writes;
+  private SendThread sends;
 
 
   //main class, Houses a main method, and initializes the program variables
@@ -69,10 +77,10 @@ public class UAVAudioServer
 
   private void updateTime()
   {
-    System.out.println("Supposedly updating!");
+    print("Supposedly updating!");
     try{
     Runtime rt = Runtime.getRuntime(); // Runs Python script
-    String[] commands = {"python","timesync.py"};
+    String[] commands = {"python2","timesync.py"};
     Process proc = rt.exec(commands);
 
     BufferedReader stdInput = new BufferedReader(new
@@ -82,23 +90,30 @@ public class UAVAudioServer
      InputStreamReader(proc.getErrorStream())); //Gets Standard Error from python
 
     // read the output from the command
-    System.out.println("Here is the standard output of the command:\n");
+    print("Connecting to PixHawk and Synching, Please Wait...:\n");
     String s = null;
-    while ((s = stdInput.readLine()) != null)
-    {
-        System.out.println(s);
-    }
 
-    // read any errors from the attempted command
-    System.out.println("Here is the standard error of the command (if any):\n");
     while ((s = stdError.readLine()) != null)
     {
-      System.out.println(s);
+      print(s);
+    }
+    print("Time Received from PixHawk:");
+    while ((s = stdInput.readLine()) != null)
+    {
+        print(s);
+    }
+    //print("Fake Time!");
+    //print("2017-07-21T14-14-20_211");
+    // read any errors from the attempted command
+
+    while ((s = stdError.readLine()) != null)
+    {
+      print(s);
     }
   }
   catch(Exception e)
   {
-    System.out.println(e);
+    e.printStackTrace();
   }
   }
 
@@ -121,19 +136,24 @@ public class UAVAudioServer
          {
            System.out.println("Server Waiting!");
            client = mainServerSocket.accept(); //WAIT for connection from client
-
+           System.out.println("Connected");
            //ON CONNECT
            shouldStop = false;
            isConnected = true;
            if(reconnecting) // If connection was previously lost, just reattach the audio stream
            {
+             comms = new CommThread(); //Create listener socket for GUI stop signal
+             sends = new SendThread();
              outputStream = new DataOutputStream(client.getOutputStream());
            }
            else //Otherwise, Initialize
            {
+             comReady = false;
+             comms = new CommThread(); //Create listener socket for GUI stop signal
+             while(!comReady){continue;}
+             System.out.println("GO!");
              updateTime(); //Set the PI Time
-             new StopThread(); //Create listener socket for GUI stop signal
-             new RecordThread(); //Start Thread for recording
+             recs = new RecordThread(); //Start Thread for recording
            }
          }//end of if
        }//end of try
@@ -181,7 +201,7 @@ public class UAVAudioServer
         }
         catch(Exception e)
         {//If folder doesn't exist, make it
-          System.out.println(e);
+          e.printStackTrace();
           new File("." + File.separator + "flightData").mkdirs();
           log = new File(logString); // Then create and open the log
           logWriter = new FileWriter(log);
@@ -203,21 +223,21 @@ public class UAVAudioServer
         audioData = new byte[16000];
         streamArray = null;
         micLine.start(); //Activate Microphone
-        System.out.println("Starting!");
-        new WriteThread();
-        new SendThread();
+        print("Starting!");
+        writes = new WriteThread();
+        sends = new SendThread();
         int count = 0; //Initialize counter for File Max Size
         readstartTime = System.currentTimeMillis();
         while ((micStream.read(audioData)) != -1 && !shouldStop) //While Microphone has audio data, and not closed,
                 //Read Buffer, and store in array "audiodata"
         {   readstopTime = System.currentTimeMillis();
-            if((readstopTime - readstartTime) > 255)System.out.println("ReadTime: "+ (readstopTime - readstartTime));
+            if((readstopTime - readstartTime) > 255)print("Long ReadTime: "+ (readstopTime - readstartTime) + "ms");
             archstartTime = System.currentTimeMillis();
             saveLock.lock();
             archiveStream.write(audioData, 0, audioData.length); //Write Data from array to file
             saveLock.unlock();
             archstopTime = System.currentTimeMillis();
-            if((archstopTime - archstartTime) > 1)System.out.println("ArchiveBlockTime1: "+ (archstopTime - archstartTime));
+            //if((archstopTime - archstartTime) > 1)print("ArchiveBlockTime1: "+ (archstopTime - archstartTime));
             //IF NOT LOCKED
             if(!streamLock.isLocked())
             {
@@ -231,7 +251,7 @@ public class UAVAudioServer
             {
               streamLock.unlock();
               streamstopTime = System.currentTimeMillis();
-              if((streamstopTime - streamstartTime) > 1)System.out.println("StreamBlockTime: "+ (streamstopTime - streamstartTime));
+              //if((streamstopTime - streamstartTime) > 1)print("StreamBlockTime: "+ (streamstopTime - streamstartTime));
             }
             }
             /*
@@ -259,7 +279,7 @@ public class UAVAudioServer
         archiveStream.writeTo(new FileOutputStream(dstFile)); //Close current file
         archiveStream.reset();
         fileStream.close();
-
+        writes.interrupt();
         micLine.close();
         //Set server states
         isConnected = false;
@@ -267,7 +287,7 @@ public class UAVAudioServer
         //Get name of the current log file
         String processlog = logString;
         new ServerThread(); //Start Thread to wait for new connection
-        System.out.println("Processing Audio");
+        print("Processing Audio");
         new AudioProcess(new String[] {processlog}); //Combine data files into a wav file. (Class in Seperate File)
       }//end of try
       catch (LineUnavailableException e)
@@ -282,10 +302,24 @@ public class UAVAudioServer
     }//end of inner class
 
 
-    // Thread to Listen on seperate socket connection for the stop signal
-    private class StopThread extends Thread
+    private void print(String s)
     {
-      StopThread()
+
+      try
+      {
+        out.println(">"+s);
+        System.out.println("Sent to remote:" + s);
+      }
+      catch(Exception e)
+      {
+      System.out.println(s);
+      }
+    }
+
+    // Thread to Listen on seperate socket connection for the stop signal
+    private class CommThread extends Thread
+    {
+      CommThread()
        {
          super();
          start();
@@ -293,13 +327,46 @@ public class UAVAudioServer
 
        public void run()
        {
-         try (ServerSocket serverSocket = new ServerSocket(6667)) //Open socket on port 6667
+         try (ServerSocket commsSocket = new ServerSocket(6667)) //Open socket on port 6667
          {
-           if (serverSocket.isBound()) // if successful
+           if (commsSocket.isBound()) // if successful
            {
-             serverSocket.accept(); //Wait for "stop signal" from client (Sonnection on this socket means stop)
-             System.out.println("Got Signal, Restarting Server!");
-             shouldStop = true; //Set boolean to exit main record loop
+               Socket socket = commsSocket.accept();
+               input =
+                   new BufferedReader(new InputStreamReader(socket.getInputStream()));
+               out =
+                   new PrintWriter(socket.getOutputStream(), true);
+               comReady = true;
+               System.out.println("Comms Ready");
+               if(reconnecting) // If connection was previously lost, just reattach the audio stream
+               {
+                 print("Server Reconnected Successfully!");
+               }
+               String answer = "";
+               int counter = 0;
+                 while (isConnected) {
+                     //print(counter);
+                     try {
+                         if(input.ready())
+                         {
+                         answer = input.readLine();
+                         System.out.println("Received: "+answer);
+                         if(answer.equals("COMMAND: QUIT"))
+                         {
+                           print("Got Signal, Restarting Server!");
+                           shouldStop = true; //Set boolean to exit main record loop
+                           System.out.println(shouldStop);
+                           out = null;
+                           break;
+                         }
+                         }
+
+                     }
+                     finally
+                    {}
+             }
+             print("commsSocket closed.");
+             //serverSocket.accept(); //Wait for "stop signal" from client (Sonnection on this socket means stop)
            }//end of if
          }//end of try
          catch (SocketException e)
@@ -334,6 +401,7 @@ public class UAVAudioServer
           Thread.sleep(10000);
           if(shouldStop)
           {
+            System.out.println("Stop Writing!");
             shouldStop = false;
             break;
           }
@@ -352,9 +420,15 @@ public class UAVAudioServer
           logWriter.flush(); //Force Write
           writestopTime = System.currentTimeMillis();
           dstFile = new File("." + File.separator + "flightData" + File.separator + dateForm.format(newTime) + ".dat"); //Create new data file
-          if((archstopTime - archstartTime) > 1)System.out.println("ArchiveBlockTime2: "+ (archstopTime - archstartTime));
-          System.out.println("WriteTime: "+ (writestopTime - writestartTime));
+          //if((archstopTime - archstartTime) > 1)print("ArchiveBlockTime2: "+ (archstopTime - archstartTime));
+          if((writestopTime - writestartTime) > 2)print("Long WriteTime: "+ (writestopTime - writestartTime)+ "ms");
         }
+        }
+        catch(InterruptedException e)
+        {
+          System.out.println("Stop Writing, Interrupted!");
+          shouldStop = false;
+          return;
         }
         catch(Exception e)
         {
@@ -382,7 +456,7 @@ public class UAVAudioServer
 
              if(streamArray == null)
              {
-               //System.out.println("nullData");
+               //print("nullData");
                continue;
              }
              else
@@ -400,14 +474,15 @@ public class UAVAudioServer
              //If Unsuccessful:
              if(isConnected) //and it was the first unsuccessful attempt
              {
-               System.out.println("Just Lost Connection.");
+               print("Just Lost Connection.");
                isConnected = false;
                reconnecting = true;
                new ServerThread(); //Reopen Server to look for connection
+
              }
              else
              { // No Connection, Do nothing.
-               System.out.println("No Connection.");
+               print("No Connection.");
              }
            }//end of catch
            catch (IOException e)
@@ -418,7 +493,7 @@ public class UAVAudioServer
            {
            streamLock.unlock();
            stopTime = System.currentTimeMillis();
-           if((stopTime - startTime) > 1)System.out.println("SendTime: "+ (stopTime - startTime));
+           if((stopTime - startTime) > 1)print("Long SendTime: "+ (stopTime - startTime)+"ms");
            }
          }
          }
