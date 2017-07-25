@@ -49,6 +49,7 @@ public class UAVAudioServer
   private RecordThread recs;
   private WriteThread writes;
   private SendThread sends;
+  private String logPath;
 
 
   //main class, Houses a main method, and initializes the program variables
@@ -193,17 +194,18 @@ public class UAVAudioServer
         micLine = AudioSystem.getTargetDataLine(format); //Prep Microphone
         startTime = new Date(); //Get current time  (BASE FOR TIMESTAMP)
         dateForm = new SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss_SSS"); //Format code for filename
-        logString = "." + File.separator + "flightData" + File.separator + dateForm.format(startTime) + ".log";
+        logString = dateForm.format(startTime) + ".log";
+        logPath = "." + File.separator + "flightData" + File.separator;
         try
         {
-          log = new File(logString); //Attempt to make log
+          log = new File(logPath + logString); //Attempt to make log
           logWriter = new FileWriter(log); // Open log for writing
         }
         catch(Exception e)
         {//If folder doesn't exist, make it
           e.printStackTrace();
           new File("." + File.separator + "flightData").mkdirs();
-          log = new File(logString); // Then create and open the log
+          log = new File(logPath + logString); // Then create and open the log
           logWriter = new FileWriter(log);
         }
 
@@ -288,7 +290,7 @@ public class UAVAudioServer
         String processlog = logString;
         new ServerThread(); //Start Thread to wait for new connection
         print("Processing Audio");
-        new AudioProcess(new String[] {processlog}); //Combine data files into a wav file. (Class in Seperate File)
+        new AudioProcess(new String[] {processlog,logPath}); //Combine data files into a wav file. (Class in Seperate File)
       }//end of try
       catch (LineUnavailableException e)
       {

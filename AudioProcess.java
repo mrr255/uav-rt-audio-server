@@ -8,36 +8,42 @@ public class AudioProcess
 
   public AudioProcess(String[] args)
   {
-    if(args.length != 1)
+    if(args.length != 2)
     {
-      System.out.println("error: need file of files");
+      System.out.println("error: need log file, and path to dat folder");
       return;
     }
-    File log = new File(args[0]); // Log has list of data files
+    System.out.println("Creating Wav File...");
+    String path = args[1];
+    File log = new File(path + args[0]); // Log has list of data files
+
     try
     {
       Scanner logr = new Scanner(log);
-      byte[] dat = new byte[0];
+      ByteArrayOutputStream bOut = new ByteArrayOutputStream();
       while(logr.hasNext())
       {	//Read Each File Name
         String curFName = logr.next();
-        RandomAccessFile curF = new RandomAccessFile("." + File.separator + "flightData" + File.separator + curFName, "r"); // Open Each File
+        RandomAccessFile curF = new RandomAccessFile(path + File.separator + curFName, "r"); // Open Each File
         byte[] curB = new byte[(int)curF.length()]; //Make containing byte array
-        curF.readFully(curB); //Add to byte array
+        curF.readFully(curB);
+        bOut.write(curB); //Add to byte array
+        curB = null;
 	      curF.close();
         //Write existing Data and New data to the array
-        dat = concat(dat,curB);
+        //dat = concat(dat,curB);
       }
-
+      byte[] dat = bOut.toByteArray();
+      bOut.close();
 	//Once Done, convert Byte Array to Wav File
       AudioInputStream pcm;
       InputStream b_in = new ByteArrayInputStream(dat);
       AudioFormat format = new AudioFormat(48000, 16, 1, true, true);
       AudioInputStream source = new AudioInputStream(b_in,format , dat.length/2);
       String file = args[0].substring(0,args[0].length()-4);
-      File newFile = new File(file + ".wav");
+      File newFile = new File(path + File.separator +file + ".wav");
       AudioSystem.write(source, AudioFileFormat.Type.WAVE, newFile);
-
+      System.out.println("Wav File Created Successfully");
       source.close();
       //pcm.close();
     }
