@@ -5,39 +5,42 @@ from dronekit import connect, VehicleMode
 import subprocess
 import sys
 import platform
-
-user_input = [0,0]
+global quitter
+quitter = False
+global cur_time
 osName = platform.system()
 if( osName == 'Windows'):
     connection_string = "COM3" #for connection via USB
 else:
     connection_string = "/dev/ttyACM0" #for connection via USB
 #print("Connecting to vehicle on: %s" % (connection_string,))
-vehicle = connect(connection_string, wait_ready=True)
+vehicle = connect(connection_string, wait_ready=False)
 
 @vehicle.on_message('SYSTEM_TIME')
 def listener(self, name, message):
-    user_input[1] = message.time_unix_usec
-    if user_input[1] == 0:
-        user_input[0] += 1
-        #print("no gps")
-    else:
-        #print(message.time_unix_usec)
-        unixT = user_input[1]/1000000.000000
-        date_str = "@" + str(unixT);
-        #print(date_str);
-        subprocess.call(["sudo","date", "+%s", "-s", date_str])
-        #print(time.time())
-        print(datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f-7:00')[:-3])
+    global quitter
+    global cur_time
+    cur_time = message.time_unix_usec
+    quitter = True
+
+
 
 try:
 
-    while user_input[1] == 0:
-        if user_input[0] >10:
-            print("NO TIME AVAILABLE: Check GPS.")
-            break
+    while not quitter :
         pass
     #print(user_input[1])
-    vehicle.close()
+    if cur_time != 0:
+        #print(message.time_unix_usec)
+        unixT = cur_time/1000000.000000
+        date_str = "@" + str(unixT);
+        #print(date_str);
+        subprocess.call(["sudo","date", "+%s", "-s", date_str])
+
+        #print(time.time())
+    else:
+        print("No gps")
+    print(datetime.datetime.utcnow().strftime('%Y-%m-%dT%H-%M-%S_%f')[:-3])
+    quit
 except KeyboardInterrupt:
-    vehicle.close()
+    quit

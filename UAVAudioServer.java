@@ -36,12 +36,10 @@ public class UAVAudioServer
   private boolean isConnected;
   private boolean reconnecting;
   private boolean shouldStop;
-  private ServerSocket mainServerSocket; //Local end for server Socket
   private FileOutputStream fileStream;
   private final ReentrantLock streamLock;
   private final ReentrantLock saveLock;
   private byte[] streamArray;
-  private ServerSocket commsSocket;
   private BufferedReader input;
   private PrintWriter out;
   private volatile boolean comReady = false;
@@ -78,10 +76,10 @@ public class UAVAudioServer
 
   private void updateTime()
   {
-    print("Supposedly updating!");
+    print("Attempting to Update Time.");
     try{
     Runtime rt = Runtime.getRuntime(); // Runs Python script
-    String[] commands = {"python2","timesync.py"};
+    String[] commands = {"python","timesync.py"};
     Process proc = rt.exec(commands);
 
     BufferedReader stdInput = new BufferedReader(new
@@ -114,6 +112,7 @@ public class UAVAudioServer
   }
   catch(Exception e)
   {
+    print("Unexpected Server Exception: Is PixHawk connected Properly? GPS?");
     e.printStackTrace();
   }
   }
@@ -165,7 +164,7 @@ public class UAVAudioServer
        catch (IOException e)
        {
          e.printStackTrace();
-       }//end of catch
+       } //end of catch
      }//end of run
    }//end of inner class
 
@@ -348,25 +347,19 @@ public class UAVAudioServer
                int counter = 0;
                  while (isConnected) {
                      //print(counter);
-                     try {
                          if(input.ready())
-                         {
-                         answer = input.readLine();
-                         System.out.println("Received: "+answer);
-                         if(answer.equals("COMMAND: QUIT"))
-                         {
-                           print("Got Signal, Restarting Server!");
-                           shouldStop = true; //Set boolean to exit main record loop
-                           System.out.println(shouldStop);
-                           out = null;
-                           break;
-                         }
-                         }
-
-                     }
-                     finally
-                    {}
-             }
+                        {
+                           answer = input.readLine();
+                           System.out.println("Received: "+answer);
+                           if(answer.equals("COMMAND: QUIT"))
+                           {
+                             print("Got Signal, Restarting Server!");
+                             shouldStop = true; //Set boolean to exit main record loop
+                             out = null;
+                             break;
+                           }
+                        }
+                    }
              print("commsSocket closed.");
              //serverSocket.accept(); //Wait for "stop signal" from client (Sonnection on this socket means stop)
            }//end of if
@@ -400,11 +393,10 @@ public class UAVAudioServer
           try{
             while(true)
             {
-          Thread.sleep(10000);
+          Thread.sleep(15000);
           if(shouldStop)
           {
             System.out.println("Stop Writing!");
-            shouldStop = false;
             break;
           }
           byte[] data;
@@ -429,7 +421,6 @@ public class UAVAudioServer
         catch(InterruptedException e)
         {
           System.out.println("Stop Writing, Interrupted!");
-          shouldStop = false;
           return;
         }
         catch(Exception e)
@@ -464,44 +455,45 @@ public class UAVAudioServer
              else
              {
                startTime = System.currentTimeMillis();
-           streamLock.lock();
-           try
-           {
-           outputStream.write(streamArray, 0, streamArray.length); //Try to write array to the socket
+               streamLock.lock();
+               try
+               {
+                 outputStream.write(streamArray, 0, streamArray.length); //Try to write array to the socket
 
-           streamArray = null;
-           }
-           catch(SocketException e)
-           {
-             //If Unsuccessful:
-             if(isConnected) //and it was the first unsuccessful attempt
-             {
-               print("Just Lost Connection.");
-               isConnected = false;
-               reconnecting = true;
-               new ServerThread(); //Reopen Server to look for connection
+                 streamArray = null;
+               }
+               catch(SocketException e)
+               {
+                 //If Unsuccessful:
+                 if(isConnected) //and it was the first unsuccessful attempt
+                 {
+                   print("Just Lost Connection.");
+                   isConnected = false;
+                   reconnecting = true;
+                   if (!shouldStop)
+                   new ServerThread(); //Reopen Server to look for connection
 
+                 }
+                 else
+                 { // No Connection, Do nothing.
+                   print("No Connection.");
+                 }
+               }//end of catch
+               catch (IOException e)
+               {
+                 e.printStackTrace();
+               }//end of catch
+               finally
+               {
+                 streamLock.unlock();
+                 stopTime = System.currentTimeMillis();
+                 if((stopTime - startTime) > 1)print("Long SendTime: "+ (stopTime - startTime)+"ms");
+               }
              }
-             else
-             { // No Connection, Do nothing.
-               print("No Connection.");
-             }
-           }//end of catch
-           catch (IOException e)
-           {
-            e.printStackTrace();
-           }//end of catch
-           finally
-           {
-           streamLock.unlock();
-           stopTime = System.currentTimeMillis();
-           if((stopTime - startTime) > 1)print("Long SendTime: "+ (stopTime - startTime)+"ms");
            }
          }
-         }
-       }
        }//end of inner class
-} //end of class
+     } //end of class
 
 
 //Solution Ideas
